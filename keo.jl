@@ -73,7 +73,7 @@ Overwrites the initial guess x with the approximate solution
 """
 function gmres!(A::AbstractArray{T,2}, b::AbstractArray{T,1}, x::AbstractArray{T,1}, tol=1e-6, nmax=length(b)) where {T<:Number}
     Q = Array{T}(undef,length(b),nmax+1)
-    R = zeros(T,nmax,nmax)
+    R = zeros(T,nmax,nmax)		# IMPORTANT - getrs accesses the lower tri portion of R as well, so must be 0!
     h = Array{T}(undef,nmax+1)
     y = zeros(T,nmax+1)
     s = Array{T}(undef,nmax)
@@ -129,7 +129,9 @@ function lhs_mat!(nu, rhs, bdy, dx, dy, M, N)
     jj = zeros(Int64,5*M*N - N   + 2*M*N + N + 2*M*N     + 2*N)
     vv = zeros(      5*M*N - N   + 2*M*N + N + 2*M*N     + 2*N)
     ctr = 1
-
+    
+    # klooge - diffusion is coded with the wrong sign, so here switching sign of nu
+    nu = -nu
     ## DIFFUSION MATRIX
     for y = 1:M
         for x = 1:N
