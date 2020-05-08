@@ -73,7 +73,7 @@ Overwrites the initial guess x with the approximate solution
 """
 function gmres!(A::AbstractArray{T,2}, b::AbstractArray{T,1}, x::AbstractArray{T,1}, tol=1e-6, nmax=length(b)) where {T<:Number}
     Q = Array{T}(undef,length(b),nmax+1)
-    R = Array{T}(undef,nmax,nmax)
+    R = zeros(T,nmax,nmax)
     h = Array{T}(undef,nmax+1)
     y = zeros(T,nmax+1)
     s = Array{T}(undef,nmax)
@@ -383,7 +383,7 @@ function keo(u0, h0, nu, dx, dz, dt, t0, T)
 end
 
 M = 50
-N = 50
+N = 100
 dx = 1e5/N
 dz = 1e3/N
 xx = dx*(0.5:1.0:N-0.5)
@@ -394,7 +394,7 @@ h0[1:div(N,2)] .= 1.0
 nu = 1e-4
 dt = 1.0
 t0 = 0.0
-T = 1000*dt
+T = 10000*dt
 q = keo(u0, h0, nu, dx, dz, dt, t0, T)
 
 plot(xx,q[M*N+1:M*N+N])
