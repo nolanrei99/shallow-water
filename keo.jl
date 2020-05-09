@@ -342,7 +342,7 @@ function keo(u0, h0, nu, dx, dz, dt, t0, T)
 
         for j = 1:N
             jjj = mod(j,N)+1           # j+1
-            if w[j] > 0.0 
+            if w[j] < 0.0 
                 theta = (u[2,j]-u[1,j]+TINY)/(u[3,j]-u[2,j]+TINY)
                 uFz[2,j] = w[j]*u[2,j] - vanleer(theta)*0.5*w[j]*(1.0-dt*w[j]/dz)*(u[2,j]-u[1,j])
                 for i = 3:M
@@ -365,12 +365,12 @@ function keo(u0, h0, nu, dx, dz, dt, t0, T)
         for j = 1:N
             jjj = mod(j,N)+1           # j+1
             for i = 1:M
-                rhs[(j-1)*M+i] += dt*(uFx[i,j]-uFx[i,jjj] + uFz[i,j]-uFz[i+1,j])
+                rhs[(j-1)*M+i] += dt*(uFx[i,j]-uFx[i,jjj] + (uFz[i,j]-uFz[i+1,j])/dz)
             end
         end
         
         rhs += rhs_holder
-        gmres!(A,rhs,q,1e-6,200)
+        gmres!(A,rhs,q,1e-7,200)
         
         t += dt
         idx += 1
@@ -390,12 +390,13 @@ dz = 1e1/M
 xx = dx*(0.5:1.0:N-0.5)
 zz = dz*(0.5:1.0:M-0.5)
 u0 = zeros(M,N)
+u0[1:25,1:N] .= 1.0
 h0 = zeros(N)
 h0[1:div(N,2)] .= 1.0
-nu = 0.0#1e-4
-dt = 1.0e-4
+nu = 1e-4
+dt = 5.0e-4
 t0 = 0.0
-T = 10120*dt
+T = 20000*dt
 q = keo(u0, h0, nu, dx, dz, dt, t0, T)
 0
 
