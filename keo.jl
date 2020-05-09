@@ -121,7 +121,7 @@ function lhs_mat!(nu, rhs, bdy, dx, dy, M, N)
     # of the 2D kinematic equations for the ocean (KEO below)
     # Modifies rhs in place to reflect the impact of the Neumann 
     #   top-surface boundary conditions stored in bdy
-    idx = (x,y) -> (y-1)*M + x
+    idx = (x,y) -> (x-1)*M + y
     dx_2 = 1.0/dx/dx
     dy_2 = 1.0/dy/dy
                      # diffusion   D_x h   w   sum D_x u   identities for h and w
@@ -129,8 +129,8 @@ function lhs_mat!(nu, rhs, bdy, dx, dy, M, N)
     jj = zeros(Int64,5*M*N - N   + 2*M*N + N + 2*M*N     + 2*N)
     vv = zeros(      5*M*N - N   + 2*M*N + N + 2*M*N     + 2*N)
     ctr = 1
-    
-    # klooge - diffusion is coded with the wrong sign, so here switching sign of nu
+
+    # klooge - diffusion is coded with the wrong sign, so here switching sign of diffusion coeff.
     nu = -nu
     ## DIFFUSION MATRIX
     for y = 1:M
@@ -212,7 +212,7 @@ end
 function convert_lhs!(ii, jj, vv, ctr0, dx, dy, dt, M, N)
     # Takes the output of lhs_mat! and adds the condition that w = ∫ -(∂_x u) dz
     # Also rescales by -dt/2 and adds identity matrix to yield the Crank-Nicolson dynamics matrix
-    idx = (x,y) -> (y-1)*M + x
+    idx = (x,y) -> (x-1)*M + y
     ctr = copy(ctr0)      # preserving the initial value of ctr so that it can still be used
 
     # Rescaling matrix
@@ -251,7 +251,7 @@ end
 function convert_rhs!(ii, jj, vv, ctr0, dx, dy, dt, M, N)
     # Takes the output of lhs_mat! and tweaks it to serve as the RHS matrix in CN discretization
     # Also rescales by dt/2 and adds identity matrix to yield the Crank-Nicolson dynamics matrix
-    idx = (x,y) -> (y-1)*M + x
+    idx = (x,y) -> (x-1)*M + y
     ctr = ctr0 + 0      # preserving the initial value of ctr so that it can still be used
 
     # Rescaling matrix
@@ -291,13 +291,14 @@ function keo(u0, h0, nu, dx, dz, dt, t0, T)
     h = 1.0*h0
     t = 0.0+t0
     q = zeros((M+2)*N)      # solution vector
-    q[1:(M*N)] = reshape(u, (M*N,1))
-    q[M*N+1:M*N+N] = h
+    q[1:(M*N)] .= reshape(u, (M*N,))
+    u = reshape(view(q, 1:M*N), (M, N))
+    q[M*N+1:M*N+N] .= h
+    h = view(q, M*N+1:M*N+N)
     w = view(q, M*N+N+1:M*N+2N)
 
     bdy = zeros(N)      # top derivative is set to bdy; zero as placeholder
     rhs = zeros((M+2)*N)# right-hand side vector
-    urhs = reshape(view(rhs,1:M*N),(M,N))   # more convenient format
     rhs_holder = zeros((M+2)*N)     # Holds effect of boundary conditions on rhs
     ii,jj,vv,ctr = lhs_mat!(nu, rhs_holder, bdy, dx, dz, M, N)
     rhs_holder .*= dt               # make it fit with rest of matrices A,B
@@ -329,12 +330,12 @@ function keo(u0, h0, nu, dx, dz, dt, t0, T)
                     # upwind is to the left
                     s = abs(s)
                     theta = (u[i,jj]-u[i,mod((j-3),N)+1]+TINY)/(u[i,j]-u[i,jj]+TINY)
-                    uFx[i,j] = 0.5*u[i,jj]^2 - vanleer(theta)*0.5*s*(1.0-dt*s/dx)*(u[i,jjj] - u[i,j])
+                    uFx[i,j] = (0.5*u[i,jj]^2 - vanleer(theta)*0.5*s*(1.0-dt*s/dx)*(u[i,jjj] - u[i,j]))/dx
                 else
                     # upwind is to the right
                     s = abs(s)
                     theta = (u[i,jjj]-u[i,j]+TINY)/(u[i,j]-u[i,jj]+TINY)
-                    uFx[i,j] = 0.5*u[i,j]^2 - vanleer(theta)*0.5*s*(1.0-dt*s/dx)*(u[i,j] - u[i,jj])
+                    uFx[i,j] = (0.5*u[i,j]^2 - vanleer(theta)*0.5*s*(1.0-dt*s/dx)*(u[i,j] - u[i,jj]))/dx
                 end
             end
         end
@@ -360,44 +361,43 @@ function keo(u0, h0, nu, dx, dz, dt, t0, T)
 
         # Solve the system of equations
         mul!(rhs,B,q)
-        #println(rhs)
         
         for j = 1:N
             jjj = mod(j,N)+1           # j+1
             for i = 1:M
-                urhs[i,j] += dt*(uFx[i,j]-uFx[i,jjj] + uFz[i,j]-uFz[i+1,j])
+                rhs[(j-1)*M+i] += dt*(uFx[i,j]-uFx[i,jjj] + uFz[i,j]-uFz[i+1,j])
             end
         end
         
-        #println(rhs)
         rhs += rhs_holder
-        #println(rhs)
         gmres!(A,rhs,q,1e-6,200)
         
         t += dt
         idx += 1
 
         if (idx%num == 0)
-            display(plot(xx,q[M*N+1:M*N+N]))
+            #display(plot(xx,q[M*N+1:M*N+N]))
+            display(plot(xx,hcat(q[1:M:M*N],q[M*N+1:M*N+N])))
         end
     end
     return q
 end
 
 M = 50
-N = 100
-dx = 1e5/N
-dz = 1e3/N
+N = 200
+dx = 1e1/N
+dz = 1e1/M
 xx = dx*(0.5:1.0:N-0.5)
 zz = dz*(0.5:1.0:M-0.5)
 u0 = zeros(M,N)
 h0 = zeros(N)
 h0[1:div(N,2)] .= 1.0
-nu = 1e-4
-dt = 1.0
+nu = 0.0#1e-4
+dt = 1.0e-4
 t0 = 0.0
-T = 10000*dt
+T = 10120*dt
 q = keo(u0, h0, nu, dx, dz, dt, t0, T)
+0
 
-plot(xx,q[M*N+1:M*N+N])
-
+#plot(xx,q[M*N+1:M*N+N])
+#plot(xx,q[1:M:M*N])
